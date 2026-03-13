@@ -6,12 +6,24 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { toast } from 'react-hot-toast';
-import { User, Mail, Lock, Calendar, CheckCircle } from 'lucide-react';
+import { 
+  User, 
+  Mail, 
+  Lock, 
+  Calendar, 
+  CheckCircle, 
+  ArrowRight, 
+  ArrowLeft,
+  Sparkles,
+  Shield,
+  Zap,
+  Globe
+} from 'lucide-react';
 
 const signupSchema = z
   .object({
@@ -95,267 +107,432 @@ export default function SignupPage() {
 
     const strength = [hasUpperCase, hasLowerCase, hasNumbers, hasSpecialChar, lengthValid].filter(Boolean).length;
     
-    if (strength <= 2) return { text: 'Weak', color: 'bg-red-500' };
-    if (strength <= 4) return { text: 'Medium', color: 'bg-yellow-500' };
-    return { text: 'Strong', color: 'bg-green-500' };
+    if (strength <= 2) return { text: 'Weak', color: 'bg-red-500', width: 33 };
+    if (strength <= 4) return { text: 'Medium', color: 'bg-yellow-500', width: 66 };
+    return { text: 'Strong', color: 'bg-green-500', width: 100 };
+  };
+
+  const stepVariants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? 1000 : -1000,
+      opacity: 0
+    }),
+    center: {
+      zIndex: 1,
+      x: 0,
+      opacity: 1
+    },
+    exit: (direction: number) => ({
+      zIndex: 0,
+      x: direction < 0 ? 1000 : -1000,
+      opacity: 0
+    })
+  };
+
+  const [[page, direction], setPage] = useState([0, 0]);
+
+  const paginate = (newDirection: number) => {
+    setPage([page + newDirection, newDirection]);
+    setStep(step + newDirection);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 dark:from-purple-900 dark:via-pink-800 dark:to-orange-800 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
+      {/* Animated Background */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute top-40 left-40 w-80 h-80 bg-indigo-400 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
+        
+        {/* Grid Pattern */}
+        <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,white,rgba(255,255,255,0))]"></div>
+      </div>
+
+      {/* Floating Elements */}
+      <div className="absolute top-20 left-20 text-white/10">
+        <Sparkles className="w-16 h-16 animate-spin-slow" />
+      </div>
+      <div className="absolute bottom-20 right-20 text-white/10">
+        <Shield className="w-20 h-20 animate-bounce-slow" />
+      </div>
+      <div className="absolute top-40 right-40 text-white/10">
+        <Zap className="w-12 h-12 animate-pulse-slow" />
+      </div>
+      <div className="absolute bottom-40 left-40 text-white/10">
+        <Globe className="w-24 h-24 animate-float" />
+      </div>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
-        className="max-w-md w-full"
+        className="max-w-md w-full relative z-10 px-4"
       >
-        <Card className="p-8 backdrop-blur-lg bg-white/90 dark:bg-gray-900/90">
+        {/* Logo/Brand */}
+        <motion.div 
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+          className="text-center mb-8"
+        >
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 shadow-2xl mb-4">
+            <span className="text-3xl font-bold text-white">S</span>
+          </div>
+          <h1 className="text-4xl font-bold text-white mb-2">SocialFlow</h1>
+          <p className="text-white/80">Join the community</p>
+        </motion.div>
+
+        <Card className="p-8 backdrop-blur-xl bg-white/10 border-white/20 shadow-2xl">
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+            <motion.h2 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-3xl font-bold text-white mb-2"
+            >
               Create Account
-            </h2>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              Join our community today
-            </p>
+            </motion.h2>
+            <motion.p 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="text-white/70"
+            >
+              Start your journey with us
+            </motion.p>
           </div>
 
-          {/* Progress Steps */}
-          <div className="flex items-center justify-center mb-8">
-            {[1, 2, 3].map((s) => (
-              <div key={s} className="flex items-center">
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    s <= step
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
-                  }`}
+          {/* Modern Progress Steps */}
+          <div className="relative mb-10">
+            <div className="absolute top-1/2 left-0 w-full h-0.5 bg-white/20 -translate-y-1/2"></div>
+            <div className="relative flex justify-between">
+              {[1, 2, 3].map((s) => (
+                <motion.div
+                  key={s}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2 + s * 0.1 }}
+                  className={`relative z-10 flex flex-col items-center`}
                 >
-                  {s < step ? <CheckCircle className="h-5 w-5" /> : s}
-                </div>
-                {s < 3 && (
-                  <div
-                    className={`w-12 h-1 mx-2 ${
-                      s < step ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
+                  <motion.div
+                    animate={{
+                      scale: step === s ? 1.2 : 1,
+                      backgroundColor: step >= s ? '#8b5cf6' : 'rgba(255,255,255,0.2)'
+                    }}
+                    className={`w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-sm border-2 ${
+                      step >= s ? 'border-purple-400' : 'border-white/20'
                     }`}
-                  />
-                )}
-              </div>
-            ))}
+                  >
+                    {s < step ? (
+                      <CheckCircle className="h-6 w-6 text-white" />
+                    ) : (
+                      <span className="text-white font-semibold">{s}</span>
+                    )}
+                  </motion.div>
+                  <span className="absolute -bottom-6 text-xs text-white/60 whitespace-nowrap">
+                    {s === 1 ? 'Basic Info' : s === 2 ? 'Security' : 'Details'}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {step === 1 && (
+            <AnimatePresence mode="wait" custom={direction}>
               <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
+                key={step}
+                custom={direction}
+                variants={stepVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{
+                  x: { type: "spring", stiffness: 300, damping: 30 },
+                  opacity: { duration: 0.2 }
+                }}
                 className="space-y-4"
               >
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Username
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      {...register('username')}
-                      className="pl-10"
-                      placeholder="johndoe"
-                      error={errors.username?.message}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      {...register('email')}
-                      type="email"
-                      className="pl-10"
-                      placeholder="you@example.com"
-                      error={errors.email?.message}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Full Name
-                  </label>
-                  <Input
-                    {...register('fullName')}
-                    placeholder="John Doe"
-                    error={errors.fullName?.message}
-                  />
-                </div>
-
-                <Button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className="w-full"
-                >
-                  Next Step
-                </Button>
-              </motion.div>
-            )}
-
-            {step === 2 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
-              >
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      {...register('password')}
-                      type="password"
-                      className="pl-10"
-                      placeholder="••••••••"
-                      error={errors.password?.message}
-                    />
-                  </div>
-                  {password && (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-gray-500">Password strength:</span>
-                        <span className="text-xs font-medium">{passwordStrength().text}</span>
-                      </div>
-                      <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${passwordStrength().color} transition-all`}
-                          style={{
-                            width: `${
-                              passwordStrength().text === 'Weak'
-                                ? 33
-                                : passwordStrength().text === 'Medium'
-                                ? 66
-                                : 100
-                            }%`,
-                          }}
+                {step === 1 && (
+                  <>
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Username
+                      </label>
+                      <div className="relative group">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40 group-focus-within:text-purple-400 transition-colors" />
+                        <Input
+                          {...register('username')}
+                          className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-purple-400 focus:ring-purple-400/20 transition-all"
+                          placeholder="johndoe"
+                          error={errors.username?.message}
                         />
                       </div>
-                    </div>
-                  )}
-                </div>
+                    </motion.div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Confirm Password
-                  </label>
-                  <Input
-                    {...register('confirmPassword')}
-                    type="password"
-                    placeholder="••••••••"
-                    error={errors.confirmPassword?.message}
-                  />
-                </div>
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Email Address
+                      </label>
+                      <div className="relative group">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40 group-focus-within:text-purple-400 transition-colors" />
+                        <Input
+                          {...register('email')}
+                          type="email"
+                          className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-purple-400 focus:ring-purple-400/20 transition-all"
+                          placeholder="you@example.com"
+                          error={errors.email?.message}
+                        />
+                      </div>
+                    </motion.div>
 
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setStep(1)}
-                    className="flex-1"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => setStep(3)}
-                    className="flex-1"
-                  >
-                    Next Step
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-
-            {step === 3 && (
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
-              >
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Date of Birth
-                  </label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                    <Input
-                      {...register('dateOfBirth')}
-                      type="date"
-                      className="pl-10"
-                      max={new Date().toISOString().split('T')[0]}
-                      error={errors.dateOfBirth?.message}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    {...register('terms')}
-                    type="checkbox"
-                    id="terms"
-                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="terms" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                    I agree to the{' '}
-                    <Link href="/terms" className="text-purple-600 hover:text-purple-500">
-                      Terms of Service
-                    </Link>{' '}
-                    and{' '}
-                    <Link href="/privacy" className="text-purple-600 hover:text-purple-500">
-                      Privacy Policy
-                    </Link>
-                  </label>
-                </div>
-                {errors.terms && (
-                  <p className="text-sm text-red-500">{errors.terms.message}</p>
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Full Name
+                      </label>
+                      <Input
+                        {...register('fullName')}
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-purple-400 focus:ring-purple-400/20 transition-all"
+                        placeholder="John Doe"
+                        error={errors.fullName?.message}
+                      />
+                    </motion.div>
+                  </>
                 )}
 
-                <div className="flex gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setStep(2)}
-                    className="flex-1"
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    type="submit"
-                    className="flex-1"
-                    isLoading={isLoading}
-                  >
-                    Create Account
-                  </Button>
-                </div>
+                {step === 2 && (
+                  <>
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Password
+                      </label>
+                      <div className="relative group">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40 group-focus-within:text-purple-400 transition-colors" />
+                        <Input
+                          {...register('password')}
+                          type="password"
+                          className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-purple-400 focus:ring-purple-400/20 transition-all"
+                          placeholder="••••••••"
+                          error={errors.password?.message}
+                        />
+                      </div>
+                      {password && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="mt-2"
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-white/60">Password strength:</span>
+                            <span className={`text-xs font-medium ${
+                              passwordStrength().text === 'Weak' ? 'text-red-400' :
+                              passwordStrength().text === 'Medium' ? 'text-yellow-400' :
+                              'text-green-400'
+                            }`}>
+                              {passwordStrength().text}
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${passwordStrength().width}%` }}
+                              transition={{ duration: 0.3 }}
+                              className={`h-full rounded-full ${passwordStrength().color}`}
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Confirm Password
+                      </label>
+                      <Input
+                        {...register('confirmPassword')}
+                        type="password"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-purple-400 focus:ring-purple-400/20 transition-all"
+                        placeholder="••••••••"
+                        error={errors.confirmPassword?.message}
+                      />
+                    </motion.div>
+                  </>
+                )}
+
+                {step === 3 && (
+                  <>
+                    <motion.div
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 }}
+                    >
+                      <label className="block text-sm font-medium text-white/80 mb-2">
+                        Date of Birth
+                      </label>
+                      <div className="relative group">
+                        <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/40 group-focus-within:text-purple-400 transition-colors" />
+                        <Input
+                          {...register('dateOfBirth')}
+                          type="date"
+                          className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-purple-400 focus:ring-purple-400/20 transition-all [color-scheme:dark]"
+                          max={new Date().toISOString().split('T')[0]}
+                          error={errors.dateOfBirth?.message}
+                        />
+                      </div>
+                    </motion.div>
+
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                      className="flex items-center space-x-3 p-4 rounded-lg bg-white/5 border border-white/10"
+                    >
+                      <input
+                        {...register('terms')}
+                        type="checkbox"
+                        id="terms"
+                        className="w-4 h-4 rounded border-white/20 bg-white/5 text-purple-600 focus:ring-purple-500/20 focus:ring-offset-0"
+                      />
+                      <label htmlFor="terms" className="text-sm text-white/80">
+                        I agree to the{' '}
+                        <Link href="/terms" className="text-purple-400 hover:text-purple-300 underline decoration-purple-400/30">
+                          Terms of Service
+                        </Link>
+                        {' '}and{' '}
+                        <Link href="/privacy" className="text-purple-400 hover:text-purple-300 underline decoration-purple-400/30">
+                          Privacy Policy
+                        </Link>
+                      </label>
+                    </motion.div>
+                    {errors.terms && (
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-sm text-red-400"
+                      >
+                        {errors.terms.message}
+                      </motion.p>
+                    )}
+                  </>
+                )}
               </motion.div>
-            )}
+            </AnimatePresence>
+
+            {/* Navigation Buttons */}
+            <div className="flex gap-3 pt-4">
+              {step > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => paginate(-1)}
+                  className="flex-1 bg-white/10 border-white/20 text-white hover:bg-white/20 transition-all"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
+              )}
+              
+              {step < 3 ? (
+                <Button
+                  type="button"
+                  onClick={() => paginate(1)}
+                  className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-lg shadow-purple-500/25"
+                >
+                  Next Step
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-lg shadow-purple-500/25"
+                  isLoading={isLoading}
+                >
+                  Create Account
+                </Button>
+              )}
+            </div>
           </form>
 
-          <p className="mt-8 text-center text-sm text-gray-600 dark:text-gray-400">
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8 }}
+            className="mt-8 text-center text-sm text-white/60"
+          >
             Already have an account?{' '}
             <Link
               href="/login"
-              className="font-medium text-purple-600 hover:text-purple-500"
+              className="font-medium text-purple-400 hover:text-purple-300 transition-colors"
             >
               Sign in
             </Link>
-          </p>
+          </motion.p>
         </Card>
       </motion.div>
+
+      <style jsx>{`
+        @keyframes blob {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(30px, -50px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+        .animate-blob {
+          animation: blob 7s infinite;
+        }
+        .animation-delay-2000 {
+          animation-delay: 2s;
+        }
+        .animation-delay-4000 {
+          animation-delay: 4s;
+        }
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-spin-slow {
+          animation: spin-slow 20s linear infinite;
+        }
+        @keyframes bounce-slow {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-20px); }
+        }
+        .animate-bounce-slow {
+          animation: bounce-slow 3s ease-in-out infinite;
+        }
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.8; }
+        }
+        .animate-pulse-slow {
+          animation: pulse-slow 4s ease-in-out infinite;
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          50% { transform: translateY(-30px) rotate(10deg); }
+        }
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }

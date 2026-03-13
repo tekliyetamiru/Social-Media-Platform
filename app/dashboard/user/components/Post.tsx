@@ -18,13 +18,15 @@ import {
   Trash2,
   Edit,
   Archive,
+  Smile,
+  Send,
+  X,
+  Loader2,
+  Play,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { Comments } from './Comments';
-import { ReactionPicker } from './ReactionPicker';
-import { db } from '@/lib/db/queries';
-import { toast } from 'react-hot-toast';
+import { Textarea } from '@/components/ui/Textarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +34,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/DropdownMenu';
+import { toast } from 'react-hot-toast';
 
 interface PostProps {
   post: any;
@@ -41,30 +44,18 @@ interface PostProps {
 }
 
 export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
-  // Add default values for missing data
-  const postData = {
-    ...post,
-    username: post.username || 'unknown',
-    full_name: post.full_name || post.username || 'User',
-    avatar_url: post.avatar_url || 'https://i.pravatar.cc/150?u=' + (post.user_id || Math.random()),
-    content: post.content || '',
-    created_at: post.created_at || new Date().toISOString(),
-    likes_count: post.likes_count || 0,
-    comments_count: post.comments_count || 0,
-    is_liked: post.is_liked || false,
-    is_bookmarked: post.is_bookmarked || false,
-    visibility: post.visibility || 'public',
-    media_urls: post.media_urls || [],
-  };
-
-  const [isLiked, setIsLiked] = useState(postData.is_liked);
-  const [likesCount, setLikesCount] = useState(postData.likes_count);
-  const [isSaved, setIsSaved] = useState(postData.is_bookmarked);
+  const [isLiked, setIsLiked] = useState(post.is_liked);
+  const [likesCount, setLikesCount] = useState(post.likes_count);
+  const [isSaved, setIsSaved] = useState(post.is_saved);
   const [showComments, setShowComments] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [reaction, setReaction] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [imageError, setImageError] = useState<Record<number, boolean>>({});
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [comment, setComment] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [comments, setComments] = useState(post.recent_comments || []);
+  const [showAllComments, setShowAllComments] = useState(false);
 
   const visibilityIcons = {
     public: <Globe className="h-4 w-4" />,
@@ -72,16 +63,17 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
     close_friends: <Lock className="h-4 w-4" />,
   };
 
+  const reactions = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '🔥'];
+
   const handleLike = async () => {
     try {
-      if (isLiked) {
-        await db.posts.unlike(post.id, currentUserId);
-        setLikesCount((prev) => prev - 1);
-      } else {
-        await db.posts.like(post.id, currentUserId);
-        setLikesCount((prev) => prev + 1);
-      }
-      setIsLiked(!isLiked);
+      const res = await fetch(`/api/posts/${post.id}/like`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      
+      setIsLiked(data.liked);
+      setLikesCount(prev => data.liked ? prev + 1 : prev - 1);
     } catch (error) {
       toast.error('Failed to update like');
     }
@@ -89,10 +81,17 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
 
   const handleReaction = async (reactionType: string) => {
     try {
-      await db.posts.addReaction(post.id, currentUserId, reactionType);
-      setReaction(reactionType);
-      setShowReactionPicker(false);
-      toast.success(`Reacted with ${reactionType}!`);
+      const res = await fetch(`/api/posts/${post.id}/reaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reaction: reactionType }),
+      });
+      
+      if (res.ok) {
+        setReaction(reactionType);
+        setShowReactionPicker(false);
+        toast.success(`Reacted with ${reactionType}`);
+      }
     } catch (error) {
       toast.error('Failed to add reaction');
     }
@@ -100,8 +99,15 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
 
   const handleSave = async () => {
     try {
-      setIsSaved(!isSaved);
-      toast.success(isSaved ? 'Post removed from saved' : 'Post saved!');
+      const res = await fetch(`/api/posts/${post.id}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ collection: 'default' }),
+      });
+      
+      const data = await res.json();
+      setIsSaved(data.saved);
+      toast.success(data.saved ? 'Post saved!' : 'Post removed from saved');
     } catch (error) {
       toast.error('Failed to save post');
     }
@@ -110,8 +116,8 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({
-        title: `Post by ${postData.username}`,
-        text: postData.content,
+        title: `Post by ${post.username}`,
+        text: post.content,
         url: `${window.location.origin}/post/${post.id}`,
       });
     } else {
@@ -121,13 +127,18 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this post?')) return;
+    if (!confirm('Are you sure you want to delete this post? This action cannot be undone.')) return;
 
     setIsDeleting(true);
     try {
-      await db.posts.delete(post.id);
-      onDelete?.(post.id);
-      toast.success('Post deleted successfully');
+      const res = await fetch(`/api/posts/${post.id}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        onDelete?.(post.id);
+        toast.success('Post deleted successfully');
+      }
     } catch (error) {
       toast.error('Failed to delete post');
     } finally {
@@ -136,17 +147,47 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
   };
 
   const handleArchive = async () => {
+    setIsArchiving(true);
     try {
-      await db.posts.archive(post.id);
-      onDelete?.(post.id);
-      toast.success('Post archived');
+      const res = await fetch(`/api/posts/${post.id}/archive`, {
+        method: 'POST',
+      });
+      
+      const data = await res.json();
+      if (data.archived) {
+        onDelete?.(post.id); // Remove from feed
+        toast.success('Post archived');
+      }
     } catch (error) {
       toast.error('Failed to archive post');
+    } finally {
+      setIsArchiving(false);
     }
   };
 
-  const handleImageError = (index: number) => {
-    setImageError(prev => ({ ...prev, [index]: true }));
+  const handleComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!comment.trim()) return;
+
+    setIsSubmittingComment(true);
+    try {
+      const res = await fetch(`/api/posts/${post.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: comment }),
+      });
+      
+      if (res.ok) {
+        const newComment = await res.json();
+        setComments([newComment, ...comments]);
+        setComment('');
+        toast.success('Comment added');
+      }
+    } catch (error) {
+      toast.error('Failed to add comment');
+    } finally {
+      setIsSubmittingComment(false);
+    }
   };
 
   return (
@@ -154,33 +195,33 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden"
+      className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-4"
     >
       {/* Post Header */}
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
-          <Link href={`/profile/${postData.username}`}>
-            <Avatar src={postData.avatar_url} alt={postData.username} />
+          <Link href={`/profile/${post.username}`}>
+            <Avatar src={post.avatar_url} alt={post.username} size="md" />
           </Link>
           <div>
             <div className="flex items-center space-x-2">
               <Link
-                href={`/profile/${postData.username}`}
+                href={`/profile/${post.username}`}
                 className="font-semibold hover:underline"
               >
-                {postData.full_name}
+                {post.full_name || post.username}
               </Link>
-              {postData.is_verified && (
-                <Star className="h-4 w-4 fill-blue-500 text-blue-500" />
+              {post.is_verified && (
+                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
               )}
               <span className="text-sm text-gray-500">
-                {formatDistanceToNow(new Date(postData.created_at), { addSuffix: true })}
+                {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
               </span>
               <span className="text-gray-400">
-                {visibilityIcons[postData.visibility]}
+                {visibilityIcons[post.visibility]}
               </span>
             </div>
-            <p className="text-sm text-gray-500">@{postData.username}</p>
+            <p className="text-sm text-gray-500">@{post.username}</p>
           </div>
         </div>
 
@@ -197,8 +238,12 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
                   <Edit className="h-4 w-4 mr-2" />
                   Edit post
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleArchive}>
-                  <Archive className="h-4 w-4 mr-2" />
+                <DropdownMenuItem onClick={handleArchive} disabled={isArchiving}>
+                  {isArchiving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Archive className="h-4 w-4 mr-2" />
+                  )}
                   Archive
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -207,7 +252,11 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
                   className="text-red-600"
                   disabled={isDeleting}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
                   Delete
                 </DropdownMenuItem>
               </>
@@ -215,7 +264,7 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
               <>
                 <DropdownMenuItem>Report post</DropdownMenuItem>
                 <DropdownMenuItem>Hide post</DropdownMenuItem>
-                <DropdownMenuItem>Unfollow @{postData.username}</DropdownMenuItem>
+                <DropdownMenuItem>Unfollow @{post.username}</DropdownMenuItem>
               </>
             )}
           </DropdownMenuContent>
@@ -224,10 +273,10 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
 
       {/* Post Content */}
       <div className="px-4 pb-2">
-        <p className="whitespace-pre-wrap">{postData.content}</p>
-        {postData.tags && postData.tags.length > 0 && (
+        <p className="whitespace-pre-wrap">{post.content}</p>
+        {post.tags && post.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mt-2">
-            {postData.tags.map((tag: string) => (
+            {post.tags.map((tag: string) => (
               <Link
                 key={tag}
                 href={`/hashtag/${tag}`}
@@ -241,35 +290,35 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
       </div>
 
       {/* Post Media */}
-      {postData.media_urls && postData.media_urls.length > 0 && (
+      {post.media_urls && post.media_urls.length > 0 && (
         <div
           className={`grid ${
-            postData.media_urls.length === 1
+            post.media_urls.length === 1
               ? 'grid-cols-1'
-              : postData.media_urls.length === 2
+              : post.media_urls.length === 2
               ? 'grid-cols-2'
               : 'grid-cols-3'
           } gap-1`}
         >
-          {postData.media_urls.map((url: string, index: number) => (
+          {post.media_urls.map((url: string, index: number) => (
             <div
               key={index}
               className={`relative ${
-                postData.media_urls.length === 1 ? 'h-96' : 'h-48'
+                post.media_urls.length === 1 ? 'h-96' : 'h-48'
               }`}
             >
-              {!imageError[index] ? (
-                <Image
-                  src={url}
-                  alt={`Post media ${index + 1}`}
-                  fill
-                  className="object-cover cursor-pointer hover:opacity-95 transition"
-                  onError={() => handleImageError(index)}
-                  unoptimized={url.startsWith('https://picsum.photos')}
-                />
-              ) : (
-                <div className="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-                  <span className="text-gray-400">Image failed to load</span>
+              <Image
+                src={url}
+                alt={`Post media ${index + 1}`}
+                fill
+                className="object-cover cursor-pointer hover:opacity-95 transition"
+                onClick={() => window.open(url, '_blank')}
+              />
+              {post.media_types?.[index] === 'video' && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-12 h-12 bg-black/50 rounded-full flex items-center justify-center">
+                    <Play className="h-6 w-6 text-white ml-1" />
+                  </div>
                 </div>
               )}
             </div>
@@ -281,84 +330,99 @@ export function Post({ post, currentUserId, onUpdate, onDelete }: PostProps) {
       <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center space-x-4">
-            <span className="font-medium">{likesCount} likes</span>
-            <span className="text-gray-500">{postData.comments_count} comments</span>
+            <button 
+              onClick={handleLike}
+              className="flex items-center space-x-1 hover:text-red-500 transition"
+            >
+              <Heart className={`h-5 w-5 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+              <span className="font-medium">{likesCount}</span>
+            </button>
+            <button 
+              onClick={() => setShowComments(!showComments)}
+              className="flex items-center space-x-1 hover:text-blue-500 transition"
+            >
+              <MessageCircle className="h-5 w-5" />
+              <span className="font-medium">{post.comments_count}</span>
+            </button>
+            <button className="flex items-center space-x-1 hover:text-green-500 transition">
+              <Share2 className="h-5 w-5" />
+              <span className="font-medium">{post.shares_count || 0}</span>
+            </button>
           </div>
-          {reaction && (
-            <span className="text-sm text-gray-500">
-              You reacted with {reaction}
-            </span>
-          )}
+          <button onClick={handleSave}>
+            <Bookmark className={`h-5 w-5 ${isSaved ? 'fill-purple-600 text-purple-600' : ''}`} />
+          </button>
         </div>
-      </div>
-
-      {/* Post Actions */}
-      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 flex items-center justify-around">
-        <div className="relative">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`flex-1 ${isLiked ? 'text-red-500' : ''}`}
-            onClick={handleLike}
-            onMouseEnter={() => setShowReactionPicker(true)}
-            onMouseLeave={() => setShowReactionPicker(false)}
-          >
-            <Heart
-              className={`h-5 w-5 mr-2 ${isLiked ? 'fill-current' : ''}`}
-            />
-            Like
-          </Button>
-          <AnimatePresence>
-            {showReactionPicker && (
-              <ReactionPicker
-                onSelect={handleReaction}
-                onClose={() => setShowReactionPicker(false)}
-              />
-            )}
-          </AnimatePresence>
-        </div>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1"
-          onClick={() => setShowComments(!showComments)}
-        >
-          <MessageCircle className="h-5 w-5 mr-2" />
-          Comment
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="flex-1"
-          onClick={handleShare}
-        >
-          <Share2 className="h-5 w-5 mr-2" />
-          Share
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className={`flex-1 ${isSaved ? 'text-blue-500' : ''}`}
-          onClick={handleSave}
-        >
-          <Bookmark
-            className={`h-5 w-5 mr-2 ${isSaved ? 'fill-current' : ''}`}
-          />
-          Save
-        </Button>
       </div>
 
       {/* Comments Section */}
       <AnimatePresence>
         {showComments && (
-          <Comments
-            postId={post.id}
-            currentUserId={currentUserId}
-            onClose={() => setShowComments(false)}
-          />
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="border-t border-gray-200 dark:border-gray-700"
+          >
+            {/* Comment Input */}
+            <div className="p-4">
+              <form onSubmit={handleComment} className="flex space-x-2">
+                <Avatar src={post.avatar_url} alt="You" size="sm" />
+                <div className="flex-1 relative">
+                  <Textarea
+                    placeholder="Write a comment..."
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    className="min-h-[40px] max-h-[80px] resize-none pr-12"
+                    rows={1}
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!comment.trim() || isSubmittingComment}
+                    className="absolute right-2 bottom-2 h-6 w-6 bg-purple-600 hover:bg-purple-700 rounded-full"
+                  >
+                    {isSubmittingComment ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3" />
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </div>
+
+            {/* Comments List */}
+            <div className="px-4 pb-4 space-y-3">
+              {(showAllComments ? comments : comments.slice(0, 2)).map((comment: any) => (
+                <div key={comment.id} className="flex space-x-2">
+                  <Avatar src={comment.user?.avatar_url} alt={comment.user?.username} size="sm" />
+                  <div className="flex-1">
+                    <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-2">
+                      <Link href={`/profile/${comment.user?.username}`} className="font-semibold text-sm hover:underline">
+                        {comment.user?.full_name || comment.user?.username}
+                      </Link>
+                      <p className="text-sm">{comment.content}</p>
+                    </div>
+                    <div className="flex items-center space-x-2 mt-1 text-xs text-gray-500">
+                      <span>{formatDistanceToNow(new Date(comment.created_at), { addSuffix: true })}</span>
+                      <button className="hover:text-gray-700">Like</button>
+                      <button className="hover:text-gray-700">Reply</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {comments.length > 2 && !showAllComments && (
+                <button
+                  onClick={() => setShowAllComments(true)}
+                  className="text-sm text-purple-600 hover:underline"
+                >
+                  View all {comments.length} comments
+                </button>
+              )}
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </motion.article>

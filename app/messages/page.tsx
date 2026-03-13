@@ -41,6 +41,7 @@ import {
   Globe,
   Lock,
   AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isToday, isYesterday } from 'date-fns';
 import { Avatar } from '@/components/ui/Avatar';
@@ -62,8 +63,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/Dialog';
-
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { toast } from 'react-hot-toast';
 import { pusherClient } from '@/lib/pusher';
 
@@ -177,7 +177,7 @@ export default function MessagesPage() {
   const [activeTab, setActiveTab] = useState('all');
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
   const [isTyping, setIsTyping] = useState(false);
-  const [showMobileSidebar, setShowMobileSidebar] = useState(!conversationId);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(true); // Always show sidebar on desktop
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -207,11 +207,24 @@ export default function MessagesPage() {
     if (conversationId) {
       fetchConversation(conversationId);
       fetchMessages(conversationId);
-      setShowMobileSidebar(false);
-    } else {
-      setShowMobileSidebar(true);
+      // Don't hide sidebar on desktop, only on mobile
+      if (window.innerWidth < 768) {
+        setShowMobileSidebar(false);
+      }
     }
   }, [conversationId]);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setShowMobileSidebar(true);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Pusher real-time subscriptions
   useEffect(() => {
@@ -304,6 +317,18 @@ export default function MessagesPage() {
       const response = await fetch('/api/messages/conversations');
       if (!response.ok) throw new Error('Failed to fetch');
       const data = await response.json();
+      
+      // Log for debugging
+      console.log('Fetched conversations:', data.length);
+      data.forEach((conv: Conversation) => {
+        console.log(`Conversation ${conv.id}:`, {
+          type: conv.type,
+          name: getConversationName(conv),
+          participants: conv.participants.map(p => p.user_id),
+          currentUserIncluded: conv.participants.some(p => p.user_id === session?.user?.id)
+        });
+      });
+      
       setConversations(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
@@ -565,13 +590,7 @@ export default function MessagesPage() {
 
   const getOtherParticipant = (conversation: Conversation) => {
     if (conversation.type === 'direct') {
-      console.log('Looking for participant not equal to:', session?.user?.id);
-      console.log('All participants:', conversation.participants);
-      
-      const found = conversation.participants.find(p => p.user_id !== session?.user?.id);
-      console.log('Found participant:', found);
-      
-      return found?.user;
+      return conversation.participants.find(p => p.user_id !== session?.user?.id)?.user;
     }
     return null;
   };
@@ -581,55 +600,25 @@ export default function MessagesPage() {
       return conversation.name || 'Group Chat';
     }
     
-    // Try multiple ways to get the other user's name
-    try {
-      // Method 1: Using getOtherParticipant
-      const otherUser = getOtherParticipant(conversation);
-      if (otherUser?.full_name) return otherUser.full_name;
-      if (otherUser?.username) return otherUser.username;
-      
-      // Method 2: Direct participant lookup
-      const otherParticipant = conversation.participants?.find(p => p.user_id !== session?.user?.id);
-      if (otherParticipant) {
-        if (otherParticipant.user?.full_name) return otherParticipant.user.full_name;
-        if (otherParticipant.user?.username) return otherParticipant.user.username;
-        // Some APIs put user data directly on participant
-        if (otherParticipant.full_name) return otherParticipant.full_name;
-        if (otherParticipant.username) return otherParticipant.username;
-      }
-      
-      // Method 3: If there are exactly 2 participants, the other is the one not current user
-      if (conversation.participants?.length === 2) {
-        const other = conversation.participants[0].user_id === session?.user?.id 
-          ? conversation.participants[1] 
-          : conversation.participants[0];
-        
-        if (other.user?.full_name) return other.user.full_name;
-        if (other.user?.username) return other.user.username;
-        if (other.full_name) return other.full_name;
-        if (other.username) return other.username;
-      }
-      
-      // Method 4: Check if conversation has name (for direct messages with saved names)
-      if (conversation.name) return conversation.name;
-      
-    } catch (error) {
-      console.error('Error getting conversation name:', error);
+    const otherUser = getOtherParticipant(conversation);
+    if (otherUser) {
+      return otherUser.full_name || otherUser.username || 'User';
     }
     
-    // Last resort - show something useful
-    if (conversation.participants?.length > 0) {
-      return `Chat with ${conversation.participants.length} participants`;
+    // Fallback if other user not found
+    if (conversation.participants?.length === 1) {
+      return conversation.participants[0].user.full_name || conversation.participants[0].user.username || 'User';
     }
     
-    return 'Loading...';
+    return 'Chat';
   };
 
   const getConversationAvatar = (conversation: Conversation) => {
     if (conversation.type === 'group') {
-      return conversation.avatar_url;
+      return conversation.avatar_url || '';
     }
-    return getOtherParticipant(conversation)?.avatar_url;
+    const otherUser = getOtherParticipant(conversation);
+    return otherUser?.avatar_url || '';
   };
 
   const getConversationStatus = (conversation: Conversation) => {
@@ -652,10 +641,20 @@ export default function MessagesPage() {
     }
   };
 
+  // Update filtered conversations with new categories
   const filteredConversations = conversations.filter(conv => {
+    // First, ensure the current user is in participants
+    const userIsParticipant = conv.participants?.some(p => p.user_id === session?.user?.id);
+    
+    if (!userIsParticipant) {
+      console.warn('Conversation without current user as participant:', conv.id);
+      return false; // Don't show conversations where user isn't a participant
+    }
+
     if (activeTab === 'unread') return conv.unread_count > 0;
+    if (activeTab === 'direct') return conv.type === 'direct';
     if (activeTab === 'groups') return conv.type === 'group';
-    return !conv.is_archived;
+    return !conv.is_archived; // 'all' tab
   });
 
   const formatMessageDate = (date: string) => {
@@ -673,6 +672,9 @@ export default function MessagesPage() {
   const removeFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
+
+  // Calculate unread count for the badge
+  const totalUnread = conversations.reduce((acc, c) => acc + c.unread_count, 0);
 
   // ==============================================
   // RENDER
@@ -725,7 +727,7 @@ export default function MessagesPage() {
           <span className="hidden md:inline text-sm font-medium">Dashboard</span>
         </button>
 
-        {/* Chat List Sidebar */}
+        {/* Chat List Sidebar - Always visible on desktop */}
         <motion.div
           initial={{ x: -300, opacity: 0 }}
           animate={{ 
@@ -735,7 +737,7 @@ export default function MessagesPage() {
           transition={{ duration: 0.3 }}
           className={`${
             showMobileSidebar ? 'block' : 'hidden md:block'
-          } absolute md:relative z-40 w-full md:w-96 h-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-700/50 flex flex-col`}
+          } md:block absolute md:relative z-40 w-full md:w-96 h-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-700/50 flex flex-col`}
         >
           {/* Sidebar Header */}
           <div className="p-4 border-b border-gray-200/50 dark:border-gray-700/50">
@@ -743,14 +745,25 @@ export default function MessagesPage() {
               <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 Messages
               </h1>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowNewChatModal(true)}
-                className="hover:bg-purple-100 dark:hover:bg-purple-900/20 hover:text-purple-600 transition-all rounded-full"
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => router.push('/messages/diagnose')}
+                  className="hover:bg-purple-100 dark:hover:bg-purple-900/20"
+                  title="Diagnose"
+                >
+                  <AlertTriangle className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowNewChatModal(true)}
+                  className="hover:bg-purple-100 dark:hover:bg-purple-900/20 hover:text-purple-600 transition-all rounded-full"
+                >
+                  <Plus className="h-5 w-5" />
+                </Button>
+              </div>
             </div>
             
             {/* Search Bar */}
@@ -768,20 +781,27 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs - Updated with 4 tabs: All, Unread, Direct, Groups */}
           <div className="px-4 pt-4">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 bg-gray-100/50 dark:bg-gray-700/50 p-1 rounded-xl">
-                <TabsTrigger value="all" className="text-xs md:text-sm rounded-lg">All</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 bg-gray-100/50 dark:bg-gray-700/50 p-1 rounded-xl">
+                <TabsTrigger value="all" className="text-xs md:text-sm rounded-lg">
+                  All
+                </TabsTrigger>
                 <TabsTrigger value="unread" className="text-xs md:text-sm rounded-lg relative">
                   Unread
-                  {conversations.reduce((acc, c) => acc + c.unread_count, 0) > 0 && (
+                  {totalUnread > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                      {conversations.reduce((acc, c) => acc + c.unread_count, 0)}
+                      {totalUnread}
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="groups" className="text-xs md:text-sm rounded-lg">Groups</TabsTrigger>
+                <TabsTrigger value="direct" className="text-xs md:text-sm rounded-lg">
+                  Direct
+                </TabsTrigger>
+                <TabsTrigger value="groups" className="text-xs md:text-sm rounded-lg">
+                  Groups
+                </TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -802,7 +822,12 @@ export default function MessagesPage() {
                   <div className="w-20 h-20 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center mx-auto mb-4">
                     <MessageCircle className="h-8 w-8 text-white" />
                   </div>
-                  <p className="text-gray-500 mb-2">No conversations yet</p>
+                  <p className="text-gray-500 mb-2">
+                    {activeTab === 'all' && 'No conversations yet'}
+                    {activeTab === 'unread' && 'No unread messages'}
+                    {activeTab === 'direct' && 'No direct messages'}
+                    {activeTab === 'groups' && 'No group chats'}
+                  </p>
                   <Button
                     onClick={() => setShowNewChatModal(true)}
                     className="bg-gradient-to-r from-purple-600 to-pink-600 text-white"
@@ -820,7 +845,10 @@ export default function MessagesPage() {
                     isSelected={conversationId === conversation.id}
                     onClick={() => {
                       router.push(`/messages?conversation=${conversation.id}`);
-                      setShowMobileSidebar(false);
+                      // On mobile, hide sidebar when conversation is selected
+                      if (window.innerWidth < 768) {
+                        setShowMobileSidebar(false);
+                      }
                     }}
                     currentUserId={session.user.id}
                     name={getConversationName(conversation)}
@@ -851,7 +879,6 @@ export default function MessagesPage() {
                     size="icon"
                     className="md:hidden hover:bg-purple-100 dark:hover:bg-purple-900/20 rounded-full flex-shrink-0"
                     onClick={() => {
-                      router.push('/messages');
                       setShowMobileSidebar(true);
                     }}
                   >
@@ -1092,7 +1119,6 @@ export default function MessagesPage() {
         onCreateDirect={createDirectChat}
         onCreateGroup={createGroupChat}
         isCreatingGroup={isCreatingGroup}
-        currentUser={session.user}
       />
 
       {/* Group Info Modal */}
@@ -1139,7 +1165,7 @@ function ChatListItem({ conversation, isSelected, onClick, currentUserId, name, 
             </div>
           ) : (
             <Avatar 
-              src={otherParticipant?.avatar_url} 
+              src={otherParticipant?.avatar_url || avatar} 
               alt={name} 
               size="md" 
               className="ring-2 ring-white dark:ring-gray-800" 

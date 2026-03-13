@@ -42,41 +42,57 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { content, messageType, mediaUrl, fileName, fileSize, mimeType, metadata } = await req.json();
+    const { content, messageType, mediaUrl, fileName, fileSize, mimeType, metadata, replyToId } = await req.json();
+
+    if (!content && !mediaUrl) {
+      return NextResponse.json({ error: 'Message content required' }, { status: 400 });
+    }
 
     const message = await messageQueries.sendMessage(
       params.conversationId,
       session.user.id,
       content,
-      messageType,
+      messageType || 'text',
       mediaUrl,
       fileName,
       fileSize,
       mimeType,
-      metadata
+      metadata,
+      replyToId
     );
 
-    // Trigger real-time event
-    await pusherServer.trigger(
-      `conversation-${params.conversationId}`,
-      'new-message',
-      message
-    );
+    if (!message) {
+      return NextResponse.json({ error: 'Failed to send message' }, { status: 500 });
+    }
 
-    // Notify other participants
-    const conversation = await messageQueries.getConversationWithDetails(params.conversationId);
-    if (conversation) {
-      for (const participant of conversation.participants) {
-        if (participant.user_id !== session.user.id) {
-          await pusherServer.trigger(
-            `user-${participant.user_id}`,
-            'new-conversation-message',
-            {
-              conversationId: params.conversationId,
-              message,
+    // Trigger real-time events if Pusher is available
+    if (pusherServer) {
+      try {
+        await pusherServer.trigger(
+          `conversation-${params.conversationId}`,
+          'new-message',
+          message
+        );
+
+        // Notify other participants
+        const conversation = await messageQueries.getConversationWithDetails(params.conversationId);
+        if (conversation) {
+          for (const participant of conversation.participants) {
+            if (participant.user_id !== session.user.id) {
+              await pusherServer.trigger(
+                `user-${participant.user_id}`,
+                'new-conversation-message',
+                {
+                  conversationId: params.conversationId,
+                  message,
+                }
+              );
             }
-          );
+          }
         }
+      } catch (pusherError) {
+        console.error('Pusher error (non-critical):', pusherError);
+        // Don't fail the request if Pusher fails
       }
     }
 

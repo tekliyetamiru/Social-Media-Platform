@@ -38,6 +38,20 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
+      // Add UploadThing hostname
+      {
+        protocol: 'https',
+        hostname: 'utfs.io',
+        port: '',
+        pathname: '/**',
+      },
+      // Add UploadThing file hostname (sometimes they use different subdomains)
+      {
+        protocol: 'https',
+        hostname: '*.ufs.sh',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
 }

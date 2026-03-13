@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth';
 import { messageQueries } from '@/lib/db/messages';
 import { pusherServer } from '@/lib/pusher';
-import { pool } from '@/lib/db'; // Add this missing import
+import { pool } from '@/lib/db';
 
 export async function DELETE(
   req: NextRequest,
@@ -17,19 +17,23 @@ export async function DELETE(
 
     const deleted = await messageQueries.deleteMessage(params.messageId, session.user.id);
 
-    if (deleted) {
-      // Get message details for real-time notification
-      const messageResult = await pool.query(
-        `SELECT conversation_id FROM messages WHERE id = $1`,
-        [params.messageId]
-      );
-
-      if (messageResult.rows.length > 0) {
-        await pusherServer.trigger(
-          `conversation-${messageResult.rows[0].conversation_id}`,
-          'message-deleted',
-          { messageId: params.messageId }
+    if (deleted && pusherServer) {
+      try {
+        // Get message details for real-time notification
+        const messageResult = await pool.query(
+          `SELECT conversation_id FROM messages WHERE id = $1`,
+          [params.messageId]
         );
+
+        if (messageResult.rows.length > 0) {
+          await pusherServer.trigger(
+            `conversation-${messageResult.rows[0].conversation_id}`,
+            'message-deleted',
+            { messageId: params.messageId }
+          );
+        }
+      } catch (pusherError) {
+        console.error('Pusher error (non-critical):', pusherError);
       }
     }
 
@@ -52,21 +56,29 @@ export async function PATCH(
 
     const { content } = await req.json();
 
+    if (!content) {
+      return NextResponse.json({ error: 'Content required' }, { status: 400 });
+    }
+
     const message = await messageQueries.editMessage(params.messageId, session.user.id, content);
 
-    if (message) {
-      // Get message details for real-time notification
-      const messageResult = await pool.query(
-        `SELECT conversation_id FROM messages WHERE id = $1`,
-        [params.messageId]
-      );
-
-      if (messageResult.rows.length > 0) {
-        await pusherServer.trigger(
-          `conversation-${messageResult.rows[0].conversation_id}`,
-          'message-edited',
-          { messageId: params.messageId, content }
+    if (message && pusherServer) {
+      try {
+        // Get message details for real-time notification
+        const messageResult = await pool.query(
+          `SELECT conversation_id FROM messages WHERE id = $1`,
+          [params.messageId]
         );
+
+        if (messageResult.rows.length > 0) {
+          await pusherServer.trigger(
+            `conversation-${messageResult.rows[0].conversation_id}`,
+            'message-edited',
+            { messageId: params.messageId, content }
+          );
+        }
+      } catch (pusherError) {
+        console.error('Pusher error (non-critical):', pusherError);
       }
     }
 

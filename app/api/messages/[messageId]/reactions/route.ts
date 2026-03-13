@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth';
-import { pool } from '@/lib/db';
+import { messageQueries } from '@/lib/db/messages';
 import { pusherServer } from '@/lib/pusher';
+import { pool } from '@/lib/db';
 
 export async function POST(
   req: NextRequest,
@@ -16,40 +17,46 @@ export async function POST(
 
     const { reaction } = await req.json();
 
+    if (!reaction) {
+      return NextResponse.json({ error: 'Reaction required' }, { status: 400 });
+    }
+
     // Add reaction
-    await pool.query(
-      `INSERT INTO message_reactions (message_id, user_id, reaction)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (message_id, user_id, reaction) DO NOTHING`,
-      [params.messageId, session.user.id, reaction]
-    );
+    await messageQueries.addReaction(params.messageId, session.user.id, reaction);
 
-    // Get conversation ID for real-time notification
-    const messageResult = await pool.query(
-      `SELECT conversation_id FROM messages WHERE id = $1`,
-      [params.messageId]
-    );
+    // Trigger real-time event if Pusher is available
+    if (pusherServer) {
+      try {
+        // Get conversation ID for real-time notification
+        const messageResult = await pool.query(
+          `SELECT conversation_id FROM messages WHERE id = $1`,
+          [params.messageId]
+        );
 
-    if (messageResult.rows.length > 0) {
-      // Get user details for the reaction
-      const userResult = await pool.query(
-        `SELECT username, avatar_url FROM users WHERE id = $1`,
-        [session.user.id]
-      );
+        if (messageResult.rows.length > 0) {
+          // Get user details for the reaction
+          const userResult = await pool.query(
+            `SELECT username, avatar_url FROM users WHERE id = $1`,
+            [session.user.id]
+          );
 
-      await pusherServer.trigger(
-        `conversation-${messageResult.rows[0].conversation_id}`,
-        'message-reaction',
-        {
-          messageId: params.messageId,
-          reaction: {
-            user_id: session.user.id,
-            reaction,
-            created_at: new Date().toISOString(),
-            user: userResult.rows[0],
-          },
+          await pusherServer.trigger(
+            `conversation-${messageResult.rows[0].conversation_id}`,
+            'message-reaction',
+            {
+              messageId: params.messageId,
+              reaction: {
+                user_id: session.user.id,
+                reaction,
+                created_at: new Date().toISOString(),
+                user: userResult.rows[0],
+              },
+            }
+          );
         }
-      );
+      } catch (pusherError) {
+        console.error('Pusher error (non-critical):', pusherError);
+      }
     }
 
     return NextResponse.json({ success: true });
@@ -71,12 +78,11 @@ export async function DELETE(
 
     const { reaction } = await req.json();
 
-    // Remove reaction
-    await pool.query(
-      `DELETE FROM message_reactions
-       WHERE message_id = $1 AND user_id = $2 AND reaction = $3`,
-      [params.messageId, session.user.id, reaction]
-    );
+    if (!reaction) {
+      return NextResponse.json({ error: 'Reaction required' }, { status: 400 });
+    }
+
+    await messageQueries.removeReaction(params.messageId, session.user.id, reaction);
 
     return NextResponse.json({ success: true });
   } catch (error) {

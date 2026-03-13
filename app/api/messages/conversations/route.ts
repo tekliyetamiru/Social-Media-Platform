@@ -27,7 +27,24 @@ export async function POST(req: NextRequest) {
 
     const { type, participantIds, name, avatarUrl } = await req.json();
 
-    // Create a real conversation in the database
+    // Validate input
+    if (!type || !['direct', 'group'].includes(type)) {
+      return NextResponse.json({ error: 'Invalid conversation type' }, { status: 400 });
+    }
+
+    if (!participantIds || !Array.isArray(participantIds)) {
+      return NextResponse.json({ error: 'Participant IDs required' }, { status: 400 });
+    }
+
+    if (type === 'group' && participantIds.length < 2) {
+      return NextResponse.json({ error: 'Group requires at least 2 participants' }, { status: 400 });
+    }
+
+    if (type === 'direct' && participantIds.length !== 1) {
+      return NextResponse.json({ error: 'Direct message requires exactly 1 participant' }, { status: 400 });
+    }
+
+    // Create conversation
     const conversation = await messageQueries.createConversation(
       type,
       participantIds,

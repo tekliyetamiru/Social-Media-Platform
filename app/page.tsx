@@ -1,11 +1,18 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth';
 import { redirect } from 'next/navigation';
+import { Hero } from './components/Hero';
+import { Features } from './components/Features';
+import { Trending } from './components/Trending';
+import { Stats } from './components/Stats';
+import { Testimonials } from './components/Testimonials';
+import { CTASection } from './components/CTASection';
+import { Footer } from '@/components/shared/Footer';
 
 export default async function Home() {
   const session = await getServerSession(authOptions);
 
-  // If user is logged in, check if they're admin
+  // If user is logged in, redirect to dashboard
   if (session) {
     if (session.user?.is_admin) {
       redirect('/dashboard/admin');
@@ -14,32 +21,16 @@ export default async function Home() {
     }
   }
 
-  // If not logged in, show landing page
+  // If not logged in, show stunning landing page
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gradient-to-br from-purple-600 to-pink-600">
-      <div className="text-center">
-        <h1 className="text-6xl font-bold text-white mb-4">
-          SocialFlow
-        </h1>
-        <p className="text-xl text-white/90 mb-8">
-          Connect with the world
-        </p>
-        
-        <div className="space-x-4">
-          <a 
-            href="/login"  // Changed from /auth/login to /login
-            className="inline-block bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-white/90 transition"
-          >
-            Login
-          </a>
-          <a 
-            href="/signup"  // Changed from /auth/signup to /signup
-            className="inline-block border-2 border-white text-white px-6 py-3 rounded-lg font-semibold hover:bg-white/10 transition"
-          >
-            Sign Up
-          </a>
-        </div>
-      </div>
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-950 dark:to-gray-900">
+      <Hero />
+      <Stats />
+      <Features />
+      <Trending />
+      <Testimonials />
+      <CTASection />
+      <Footer />
     </main>
   );
 }
